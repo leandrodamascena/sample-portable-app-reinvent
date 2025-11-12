@@ -1,0 +1,6 @@
+# Automatically generated image URI file
+.image_uri
+
+# Temporary files
+/tmp/
+*.tmp

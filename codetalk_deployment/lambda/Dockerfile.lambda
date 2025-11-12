@@ -1,0 +1,13 @@
+FROM public.ecr.aws/lambda/python:3.11
+
+# Install dependencies directly
+RUN pip install --no-cache-dir fastapi==0.104.1 mangum==0.17.0
+
+# Copy the clean architecture code
+COPY base_python/clean/ ${LAMBDA_TASK_ROOT}/
+
+# Copy the Lambda handler
+COPY codetalk_deployment/lambda/lambda_handler.py ${LAMBDA_TASK_ROOT}/
+
+# Set the handler
+CMD ["lambda_handler.handler"]
