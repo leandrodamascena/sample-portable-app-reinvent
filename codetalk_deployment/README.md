@@ -1,6 +1,6 @@
 # Clean Architecture App Deployment Scripts
 
-This directory contains deployment scripts for the clean architecture Python application to various AWS services: ECS, EKS, and Lambda.
+This directory contains deployment scripts for the `base_python` clean architecture implementation to various AWS services: ECS, EKS, and Lambda.
 
 ## Prerequisites
 
@@ -64,7 +64,7 @@ codetalk_deployment/build-and-push.sh
 
 This script will:
 - Create an ECR repository if it doesn't exist
-- Build the Docker image using the Dockerfile
+- Build the Docker image using the Dockerfile (from the `base_python` implementation)
 - Tag and push the image to ECR
 - **Automatically export IMAGE_URI** and save it for other scripts to use
 
