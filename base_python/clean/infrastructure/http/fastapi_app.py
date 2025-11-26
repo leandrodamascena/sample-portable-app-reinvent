@@ -49,10 +49,20 @@ def create_fastapi_app(
     create_order_use_case = CreateOrderUseCase(order_repository)
     delete_order_use_case = DeleteOrderUseCase(order_repository)
 
-    # Health check
-    @app.get("/health")
-    def health_check():
-        return {"message": "health from clean architecture"}
+    # Health check - Web UI
+    @app.get("/health", response_class=HTMLResponse)
+    async def health_check_page(request: Request):
+        if templates is None:
+            return {"status": "healthy", "message": "health from clean architecture"}
+        return templates.TemplateResponse(
+            "health.html",
+            {"request": request, "status": "healthy"}
+        )
+    
+    # Health check - API
+    @app.get("/api/health")
+    def health_check_api():
+        return {"status": "healthy", "message": "health from clean architecture"}
 
     # User endpoints - Web UI
     @app.get("/users", response_class=HTMLResponse)

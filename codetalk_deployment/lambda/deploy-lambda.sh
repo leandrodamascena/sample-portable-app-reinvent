@@ -215,36 +215,9 @@ fi
 echo "⏳ Waiting for function to be active..."
 aws lambda wait function-active --function-name ${FUNCTION_NAME} --region ${AWS_REGION}
 
-# Create or update function URL configuration with AWS_IAM auth
-echo "🌐 Creating function URL with AWS_IAM authentication..."
-FUNCTION_URL=$(aws lambda create-function-url-config \
-    --function-name ${FUNCTION_NAME} \
-    --auth-type AWS_IAM \
-    --cors 'AllowCredentials=true,AllowHeaders=["authorization","content-type","x-amz-date","x-amz-security-token"],AllowMethods=["*"],AllowOrigins=["*"]' \
-    --region ${AWS_REGION} \
-    --query 'FunctionUrl' \
-    --output text 2>/dev/null)
-
-# Add IAM permission for authenticated access
-if [ $? -eq 0 ] && [ ! -z "$FUNCTION_URL" ]; then
-    echo "🔐 Adding IAM permission for authenticated access..."
-    aws lambda add-permission \
-        --function-name ${FUNCTION_NAME} \
-        --statement-id FunctionURLAllowIAMAccess \
-        --action lambda:InvokeFunctionUrl \
-        --principal "*" \
-        --function-url-auth-type AWS_IAM \
-        --region ${AWS_REGION} > /dev/null 2>&1 || echo "   (Permission may already exist)"
-fi
-
-if [ -z "$FUNCTION_URL" ]; then
-    # Function URL might already exist, get it
-    FUNCTION_URL=$(aws lambda get-function-url-config \
-        --function-name ${FUNCTION_NAME} \
-        --region ${AWS_REGION} \
-        --query 'FunctionUrl' \
-        --output text 2>/dev/null)
-fi
+# Skip function URL creation - Lambda will only be accessible via ALB
+echo "🔒 Skipping function URL creation (Lambda accessible only via ALB)..."
+FUNCTION_URL=""
 
 # Test the function
 echo "🧪 Testing Lambda function..."
@@ -265,17 +238,10 @@ echo ""
 echo "✅ Lambda deployment completed!"
 echo "📍 Function Name: ${FUNCTION_NAME}"
 echo "📍 Function ARN: arn:aws:lambda:${AWS_REGION}:${AWS_ACCOUNT_NUMBER}:function:${FUNCTION_NAME}"
-if [ ! -z "$FUNCTION_URL" ]; then
-    echo "📍 Function URL: ${FUNCTION_URL}"
-    echo "🔐 Authentication: AWS_IAM (requires signed requests)"
-    echo ""
-    echo "🌐 To access in browser, generate a signed URL:"
-    echo "   ./get-signed-url.sh /health"
-    echo "   ./get-signed-url.sh /users"
-    echo ""
-    echo "🔧 For programmatic access with AWS SDK:"
-    echo "   Use AWS credentials to sign requests to: ${FUNCTION_URL}"
-fi
+echo "🔒 Function URL: Disabled (accessible only via ALB)"
+echo ""
+echo "💡 To make Lambda publicly accessible, deploy with ALB:"
+echo "   ./deploy-lambda-with-alb.sh"
 echo ""
 echo "💡 Useful commands:"
 echo "   aws lambda invoke --function-name ${FUNCTION_NAME} --payload '{}' response.json --region ${AWS_REGION}"

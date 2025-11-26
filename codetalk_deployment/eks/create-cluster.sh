@@ -3,7 +3,7 @@
 # Configuration variables
 AWS_REGION="${AWS_REGION:-us-west-2}"
 CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-eks}"
-KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.31}"
+KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.34}"
 
 # Get AWS account number dynamically
 AWS_ACCOUNT_NUMBER=$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null)

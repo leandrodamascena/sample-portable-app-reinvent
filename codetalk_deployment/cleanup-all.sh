@@ -65,7 +65,24 @@ echo "🧹 Starting cleanup process..."
 if [ "$CLEANUP_TARGET" == "all" ] || [ "$CLEANUP_TARGET" == "ecs" ]; then
     echo "🚢 Cleaning up ECS resources..."
     cd ecs
-    ./cleanup-ecs.sh
+    
+    # Try force cleanup first (handles stuck capacity providers)
+    if [ -f "./force-cleanup-ecs.sh" ]; then
+        echo "Using force cleanup for better resource removal..."
+        ./force-cleanup-ecs.sh
+        
+        # Wait a bit and run again if cluster still exists
+        sleep 10
+        CLUSTER_STATUS=$(aws ecs describe-clusters --clusters clean-architecture-cluster* --region ${AWS_REGION} --query 'clusters[0].status' --output text 2>/dev/null)
+        if [ "$CLUSTER_STATUS" == "ACTIVE" ]; then
+            echo "⏳ Cluster still active, running force cleanup again..."
+            ./force-cleanup-ecs.sh
+        fi
+    else
+        # Fallback to regular cleanup
+        ./cleanup-ecs.sh
+    fi
+    
     cd ..
     echo "✅ ECS cleanup completed"
     echo ""

@@ -165,6 +165,32 @@ else
     fi
 fi
 
+# Add permission for ALB to invoke Lambda FIRST (before registration)
+echo "🔐 Adding permission for ALB to invoke Lambda..."
+# Remove old permission if exists
+aws lambda remove-permission \
+    --function-name ${FUNCTION_NAME} \
+    --statement-id AllowALBInvoke \
+    --region ${AWS_REGION} 2>/dev/null || true
+
+# Add new permission
+aws lambda add-permission \
+    --function-name ${FUNCTION_NAME} \
+    --statement-id AllowALBInvoke \
+    --action lambda:InvokeFunction \
+    --principal elasticloadbalancing.amazonaws.com \
+    --source-arn ${TG_ARN} \
+    --region ${AWS_REGION} 2>&1
+
+if [ $? -eq 0 ]; then
+    echo "✅ Permission added successfully"
+else
+    echo "⚠️  Permission may already exist"
+fi
+
+# Wait for permission to propagate
+sleep 5
+
 # Register Lambda function with Target Group
 echo "📝 Registering Lambda function with Target Group..."
 echo "   Lambda ARN: ${LAMBDA_ARN}"
@@ -210,17 +236,12 @@ else
         echo "⚠️  InvalidTarget error - checking Lambda function state..."
         aws lambda get-function --function-name ${FUNCTION_NAME} --region ${AWS_REGION} --query 'Configuration.[State,LastUpdateStatus]' --output text
     fi
+    
+    if [[ "$REGISTER_OUTPUT" == *"AccessDenied"* ]]; then
+        echo "⚠️  AccessDenied error - checking Lambda permissions..."
+        aws lambda get-policy --function-name ${FUNCTION_NAME} --region ${AWS_REGION} 2>&1 | jq '.' || echo "No policy found"
+    fi
 fi
-
-# Add permission for ALB to invoke Lambda
-echo "🔐 Adding permission for ALB to invoke Lambda..."
-aws lambda add-permission \
-    --function-name ${FUNCTION_NAME} \
-    --statement-id AllowALBInvoke \
-    --action lambda:InvokeFunction \
-    --principal elasticloadbalancing.amazonaws.com \
-    --source-arn ${TG_ARN} \
-    --region ${AWS_REGION} 2>/dev/null || echo "   (Permission may already exist)"
 
 # Create ALB Listener
 echo "👂 Creating ALB Listener..."
