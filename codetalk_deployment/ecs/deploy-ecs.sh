@@ -9,7 +9,9 @@ if [ -z "$AWS_ACCOUNT_NUMBER" ]; then
     echo "❌ Unable to get AWS account number. Please check your AWS credentials."
     exit 1
 fi
-CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-cluster}"
+# Add random hash to avoid conflicts with existing resources
+RANDOM_HASH=$(date +%s | md5sum | head -c 8)
+CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-cluster-${RANDOM_HASH}}"
 SERVICE_NAME="${SERVICE_NAME:-clean-architecture-service}"
 TASK_FAMILY="${TASK_FAMILY:-clean-architecture-task}"
 IMAGE_URI="${IMAGE_URI}"
@@ -79,6 +81,7 @@ if [ -z "$INFRA_ROLE_ARN" ] || [ "$INFRA_ROLE_ARN" == "None" ]; then
         "Version": "2012-10-17",
         "Statement": [
             {
+                "Sid": "AllowAccessToECSForInfrastructureManagement",
                 "Effect": "Allow",
                 "Principal": {
                     "Service": "ecs.amazonaws.com"
@@ -87,63 +90,15 @@ if [ -z "$INFRA_ROLE_ARN" ] || [ "$INFRA_ROLE_ARN" == "None" ]; then
             }
         ]
     }'
-    # Create custom infrastructure policy since the managed policy doesn't exist yet
-    POLICY_NAME="ECSInfrastructureRolePolicy"
-    POLICY_ARN="arn:aws:iam::${AWS_ACCOUNT_NUMBER}:policy/${POLICY_NAME}"
     
-    # Check if policy exists
-    aws iam get-policy --policy-arn ${POLICY_ARN} --region ${AWS_REGION} >/dev/null 2>&1 || {
-        echo "Creating custom ECS Infrastructure policy..."
-        cat > /tmp/ecs-infrastructure-policy.json <<EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Action": [
-                "iam:PassRole"
-            ],
-            "Resource": [
-                "arn:aws:iam::*:role/ecsInstanceRole*"
-            ]
-        },
-        {
-            "Effect": "Allow",
-            "Action": [
-                "ec2:CreateTags",
-                "ec2:DescribeImages",
-                "ec2:DescribeInstances",
-                "ec2:DescribeInstanceTypes",
-                "ec2:DescribeInstanceAttribute",
-                "ec2:DescribeRouteTables",
-                "ec2:DescribeSecurityGroups",
-                "ec2:DescribeSubnets",
-                "ec2:DescribeVpcs",
-                "ec2:RunInstances",
-                "ec2:TerminateInstances",
-                "autoscaling:CreateAutoScalingGroup",
-                "autoscaling:CreateLaunchConfiguration",
-                "autoscaling:DeleteAutoScalingGroup",
-                "autoscaling:DeleteLaunchConfiguration",
-                "autoscaling:Describe*",
-                "autoscaling:UpdateAutoScalingGroup",
-                "ecs:CreateCluster",
-                "ecs:DeregisterContainerInstance",
-                "ecs:DescribeClusters",
-                "ecs:DescribeContainerInstances",
-                "ecs:RegisterContainerInstance",
-                "ssm:GetParameters"
-            ],
-            "Resource": "*"
-        }
-    ]
-}
-EOF
-        aws iam create-policy --policy-name ${POLICY_NAME} --policy-document file:///tmp/ecs-infrastructure-policy.json --region ${AWS_REGION}
-    }
-    
-    aws iam attach-role-policy --role-name ${INFRA_ROLE_NAME} --policy-arn ${POLICY_ARN} --region ${AWS_REGION}
+    # Attach AWS managed policy for ECS Managed Instances
+    echo "Attaching AWS managed policy for ECS Managed Instances..."
+    aws iam attach-role-policy --role-name ${INFRA_ROLE_NAME} --policy-arn arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForManagedInstances
     INFRA_ROLE_ARN="arn:aws:iam::${AWS_ACCOUNT_NUMBER}:role/${INFRA_ROLE_NAME}"
+else
+    # Make sure the managed policy is attached to existing role
+    echo "Ensuring AWS managed policy is attached..."
+    aws iam attach-role-policy --role-name ${INFRA_ROLE_NAME} --policy-arn arn:aws:iam::aws:policy/AmazonECSInfrastructureRolePolicyForManagedInstances 2>/dev/null || true
 fi
 
 # Create instance profile for container agent
@@ -343,9 +298,61 @@ EOF
         exit 1
     fi
     
+    echo "⏳ Waiting for capacity provider to become ACTIVE (this may take 30-60 seconds)..."
+    
+    # Wait up to 2 minutes for capacity provider to become ACTIVE
+    for i in {1..24}; do
+        sleep 5
+        CP_STATUS=$(aws ecs describe-capacity-providers --capacity-providers ${CAPACITY_PROVIDER_NAME} --region ${AWS_REGION} --query 'capacityProviders[0].status' --output text 2>/dev/null)
+        
+        if [ "$CP_STATUS" == "ACTIVE" ]; then
+            echo "✅ Capacity provider is ACTIVE"
+            break
+        elif [ "$CP_STATUS" == "INACTIVE" ]; then
+            echo "❌ Capacity provider became INACTIVE"
+            echo "🔍 Checking for failure reason..."
+            aws ecs describe-capacity-providers --capacity-providers ${CAPACITY_PROVIDER_NAME} --region ${AWS_REGION} --query 'capacityProviders[0].updateStatusReason' --output text
+            exit 1
+        fi
+        
+        echo "   Waiting... (${i}/24) Status: ${CP_STATUS}"
+    done
+    
+    # Final check
+    CP_STATUS=$(aws ecs describe-capacity-providers --capacity-providers ${CAPACITY_PROVIDER_NAME} --region ${AWS_REGION} --query 'capacityProviders[0].status' --output text 2>/dev/null)
+    if [ "$CP_STATUS" != "ACTIVE" ]; then
+        echo "❌ Capacity provider is not ACTIVE (status: ${CP_STATUS})"
+        echo "🔍 Checking for failure reason..."
+        aws ecs describe-capacity-providers --capacity-providers ${CAPACITY_PROVIDER_NAME} --region ${AWS_REGION}
+        exit 1
+    fi
+    
     echo "✅ Managed Instances capacity provider created: ${CAPACITY_PROVIDER_NAME}"
 else
     echo "✅ Using existing capacity provider: ${CAPACITY_PROVIDER_NAME}"
+    # Verify existing capacity provider is ACTIVE
+    CP_STATUS=$(aws ecs describe-capacity-providers --capacity-providers ${CAPACITY_PROVIDER_NAME} --region ${AWS_REGION} --query 'capacityProviders[0].status' --output text 2>/dev/null)
+    if [ "$CP_STATUS" != "ACTIVE" ]; then
+        echo "❌ Existing capacity provider is not ACTIVE (status: ${CP_STATUS})"
+        echo "💡 Waiting for capacity provider to become ACTIVE..."
+        
+        # Wait up to 2 minutes for capacity provider to become ACTIVE
+        for i in {1..24}; do
+            sleep 5
+            CP_STATUS=$(aws ecs describe-capacity-providers --capacity-providers ${CAPACITY_PROVIDER_NAME} --region ${AWS_REGION} --query 'capacityProviders[0].status' --output text 2>/dev/null)
+            if [ "$CP_STATUS" == "ACTIVE" ]; then
+                echo "✅ Capacity provider is now ACTIVE"
+                break
+            fi
+            echo "   Still waiting... (${i}/24) Status: ${CP_STATUS}"
+        done
+        
+        if [ "$CP_STATUS" != "ACTIVE" ]; then
+            echo "❌ Capacity provider did not become ACTIVE in time"
+            echo "💡 Please check AWS console or wait longer and try again"
+            exit 1
+        fi
+    fi
 fi
 
 # Step 5: Configure cluster capacity provider strategy
@@ -367,6 +374,11 @@ EOF
 
 # Configure cluster capacity provider strategy
 aws ecs put-cluster-capacity-providers --cli-input-json file:///tmp/cluster-cp-strategy.json --region ${AWS_REGION}
+
+if [ $? -ne 0 ]; then
+    echo "❌ Failed to configure cluster capacity provider strategy"
+    exit 1
+fi
 
 echo "✅ Cluster capacity provider strategy configured"
 

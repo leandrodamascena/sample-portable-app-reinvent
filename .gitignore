@@ -10,3 +10,7 @@ coverage/
 venv/
 .venv/
 __pycache__
+
+# Build artifacts
+.image_uri
+codetalk_deployment/.image_uri

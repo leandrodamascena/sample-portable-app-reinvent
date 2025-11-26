@@ -26,30 +26,49 @@ echo ""
 echo "🔄 Step 1: Scaling down and deleting ECS service..."
 SERVICE_EXISTS=$(aws ecs describe-services --cluster ${CLUSTER_NAME} --services ${SERVICE_NAME} --region ${AWS_REGION} --query 'services[0].status' --output text 2>/dev/null)
 
-if [ "$SERVICE_EXISTS" == "ACTIVE" ]; then
+if [ "$SERVICE_EXISTS" == "ACTIVE" ] || [ "$SERVICE_EXISTS" == "DRAINING" ]; then
     echo "📉 Scaling service to 0 tasks..."
-    aws ecs update-service --cluster ${CLUSTER_NAME} --service ${SERVICE_NAME} --desired-count 0 --region ${AWS_REGION} >/dev/null
+    aws ecs update-service --cluster ${CLUSTER_NAME} --service ${SERVICE_NAME} --desired-count 0 --region ${AWS_REGION} >/dev/null 2>&1 || true
     
-    echo "⏳ Waiting for tasks to stop..."
-    aws ecs wait services-stable --cluster ${CLUSTER_NAME} --services ${SERVICE_NAME} --region ${AWS_REGION}
+    echo "⏳ Stopping all running tasks..."
+    TASK_ARNS=$(aws ecs list-tasks --cluster ${CLUSTER_NAME} --service-name ${SERVICE_NAME} --region ${AWS_REGION} --query 'taskArns' --output text 2>/dev/null)
+    if [ ! -z "$TASK_ARNS" ] && [ "$TASK_ARNS" != "None" ]; then
+        for TASK_ARN in $TASK_ARNS; do
+            echo "🛑 Stopping task: $(basename $TASK_ARN)"
+            aws ecs stop-task --cluster ${CLUSTER_NAME} --task $TASK_ARN --region ${AWS_REGION} >/dev/null 2>&1 || true
+        done
+    fi
+    
+    echo "⏳ Waiting for all tasks to stop (this may take a minute)..."
+    sleep 30
     
     echo "🗑️  Deleting service..."
-    aws ecs delete-service --cluster ${CLUSTER_NAME} --service ${SERVICE_NAME} --region ${AWS_REGION} >/dev/null
+    aws ecs delete-service --cluster ${CLUSTER_NAME} --service ${SERVICE_NAME} --force --region ${AWS_REGION} >/dev/null 2>&1 || true
     echo "✅ Service deleted"
 else
     echo "ℹ️  Service ${SERVICE_NAME} not found or already deleted"
 fi
 
-# Step 2: Delete managed instances capacity provider
-echo "🖥️  Step 2: Deleting managed instances capacity provider..."
+# Step 2: Remove capacity provider association and delete it
+echo "🖥️  Step 2: Removing capacity provider from cluster..."
+CLUSTER_EXISTS=$(aws ecs describe-clusters --clusters ${CLUSTER_NAME} --region ${AWS_REGION} --query 'clusters[0].status' --output text 2>/dev/null)
+
+if [ "$CLUSTER_EXISTS" == "ACTIVE" ]; then
+    echo "🔗 Clearing capacity provider strategy from cluster..."
+    aws ecs put-cluster-capacity-providers \
+        --cluster ${CLUSTER_NAME} \
+        --capacity-providers [] \
+        --default-capacity-provider-strategy [] \
+        --region ${AWS_REGION} >/dev/null 2>&1 || true
+    
+    echo "⏳ Waiting for capacity provider to detach..."
+    sleep 10
+fi
+
+echo "🗑️  Deleting managed instances capacity provider..."
 CP_EXISTS=$(aws ecs describe-capacity-providers --capacity-providers ${CAPACITY_PROVIDER_NAME} --region ${AWS_REGION} --query 'capacityProviders[0].name' --output text 2>/dev/null)
 
 if [ "$CP_EXISTS" == "${CAPACITY_PROVIDER_NAME}" ]; then
-    # Remove capacity provider from cluster first
-    echo "🔗 Removing capacity provider from cluster..."
-    aws ecs put-cluster-capacity-providers --cluster ${CLUSTER_NAME} --capacity-providers --default-capacity-provider-strategy --region ${AWS_REGION} 2>/dev/null || true
-    
-    echo "🗑️  Deleting managed instances capacity provider..."
     aws ecs delete-capacity-provider --capacity-provider ${CAPACITY_PROVIDER_NAME} --region ${AWS_REGION} >/dev/null 2>&1 || true
     echo "✅ Managed instances capacity provider deleted"
 else

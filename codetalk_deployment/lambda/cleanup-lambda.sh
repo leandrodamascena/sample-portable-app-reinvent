@@ -13,14 +13,52 @@ if [ -z "$AWS_ACCOUNT_NUMBER" ]; then
 fi
 FUNCTION_NAME="${FUNCTION_NAME:-clean-architecture-lambda}"
 ROLE_NAME="${ROLE_NAME:-lambda-execution-role}"
+ALB_NAME="${ALB_NAME:-clean-architecture-lambda-alb}"
+TG_NAME="${TG_NAME:-clean-architecture-lambda-tg}"
 
 echo "🧹 Cleaning up Lambda resources..."
 echo "📍 Function: ${FUNCTION_NAME}"
 echo "📍 Role: ${ROLE_NAME}"
+echo "📍 ALB: ${ALB_NAME}"
+echo "📍 Target Group: ${TG_NAME}"
 echo ""
 
-# Step 1: Delete Lambda function URL configuration and permissions
-echo "🌐 Step 1: Deleting Lambda function URL and permissions..."
+# Step 1: Delete ALB and Target Group
+echo "⚖️  Step 1: Deleting Application Load Balancer resources..."
+
+# Get ALB ARN
+ALB_ARN=$(aws elbv2 describe-load-balancers --names ${ALB_NAME} --query 'LoadBalancers[0].LoadBalancerArn' --output text --region ${AWS_REGION} 2>/dev/null)
+
+if [ "$ALB_ARN" != "None" ] && [ ! -z "$ALB_ARN" ]; then
+    echo "🗑️  Deleting Application Load Balancer..."
+    aws elbv2 delete-load-balancer --load-balancer-arn ${ALB_ARN} --region ${AWS_REGION} 2>/dev/null && echo "✅ ALB deleted" || echo "ℹ️  ALB not found"
+    
+    # Wait for ALB to be deleted before deleting target group
+    echo "⏳ Waiting for ALB to be deleted..."
+    sleep 30
+fi
+
+# Get Target Group ARN
+TG_ARN=$(aws elbv2 describe-target-groups --names ${TG_NAME} --query 'TargetGroups[0].TargetGroupArn' --output text --region ${AWS_REGION} 2>/dev/null)
+
+if [ "$TG_ARN" != "None" ] && [ ! -z "$TG_ARN" ]; then
+    echo "🗑️  Deleting Target Group..."
+    aws elbv2 delete-target-group --target-group-arn ${TG_ARN} --region ${AWS_REGION} 2>/dev/null && echo "✅ Target Group deleted" || echo "ℹ️  Target Group not found"
+fi
+
+# Delete ALB security group
+ALB_SG_ID=$(aws ec2 describe-security-groups --filters "Name=group-name,Values=${ALB_NAME}-sg" --query 'SecurityGroups[0].GroupId' --output text --region ${AWS_REGION} 2>/dev/null)
+if [ "$ALB_SG_ID" != "None" ] && [ ! -z "$ALB_SG_ID" ]; then
+    echo "🗑️  Deleting ALB security group ${ALB_SG_ID}..."
+    sleep 10  # Wait for ALB to be fully deleted
+    aws ec2 delete-security-group --group-id ${ALB_SG_ID} --region ${AWS_REGION} 2>/dev/null && echo "✅ ALB security group deleted" || echo "⚠️  ALB security group may be in use"
+fi
+
+# Step 2: Delete Lambda function URL configuration and permissions
+echo "🌐 Step 2: Deleting Lambda function URL and permissions..."
+
+# Remove ALB invoke permission
+aws lambda remove-permission --function-name ${FUNCTION_NAME} --statement-id AllowALBInvoke --region ${AWS_REGION} 2>/dev/null || true
 
 # Remove IAM permission
 aws lambda remove-permission --function-name ${FUNCTION_NAME} --statement-id FunctionURLAllowIAMAccess --region ${AWS_REGION} 2>/dev/null || true
@@ -31,8 +69,8 @@ aws lambda remove-permission --function-name ${FUNCTION_NAME} --statement-id Fun
 # Delete function URL
 aws lambda delete-function-url-config --function-name ${FUNCTION_NAME} --region ${AWS_REGION} 2>/dev/null && echo "✅ Function URL deleted" || echo "ℹ️  Function URL not found"
 
-# Step 2: Delete Lambda function
-echo "⚡ Step 2: Deleting Lambda function..."
+# Step 3: Delete Lambda function
+echo "⚡ Step 3: Deleting Lambda function..."
 FUNCTION_EXISTS=$(aws lambda get-function --function-name ${FUNCTION_NAME} --region ${AWS_REGION} --query 'Configuration.FunctionName' --output text 2>/dev/null)
 
 if [ "$FUNCTION_EXISTS" == "${FUNCTION_NAME}" ]; then
@@ -43,13 +81,13 @@ else
     echo "ℹ️  Lambda function ${FUNCTION_NAME} not found"
 fi
 
-# Step 3: Delete CloudWatch log group
-echo "📝 Step 3: Deleting CloudWatch log group..."
+# Step 4: Delete CloudWatch log group
+echo "📝 Step 4: Deleting CloudWatch log group..."
 aws logs delete-log-group --log-group-name /aws/lambda/${FUNCTION_NAME} --region ${AWS_REGION} 2>/dev/null && echo "✅ Log group deleted" || echo "ℹ️  Log group not found"
 
-# Step 4: Clean up IAM role (optional - ask user)
+# Step 5: Clean up IAM role (optional - ask user)
 echo ""
-echo "🔐 Step 4: IAM role cleanup..."
+echo "🔐 Step 5: IAM role cleanup..."
 echo "The following IAM role was created and can be deleted:"
 echo "   - ${ROLE_NAME}"
 echo ""
@@ -65,9 +103,9 @@ else
     echo "ℹ️  IAM role preserved"
 fi
 
-# Step 5: Clean up Lambda ECR repository (optional)
+# Step 6: Clean up Lambda ECR repository (optional)
 echo ""
-echo "📦 Step 5: Lambda ECR repository cleanup..."
+echo "📦 Step 6: Lambda ECR repository cleanup..."
 LAMBDA_IMAGE_NAME="clean-architecture-app-lambda"
 echo "The Lambda-specific ECR repository was created: ${LAMBDA_IMAGE_NAME}"
 echo ""

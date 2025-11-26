@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Orders - Clean Architecture</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 3em;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .nav {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-bottom: 30px;
+        }
+        
+        .nav a {
+            padding: 10px 25px;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            text-decoration: none;
+            border-radius: 8px;
+            transition: all 0.3s;
+        }
+        
+        .nav a:hover {
+            background: rgba(255,255,255,0.3);
+            transform: translateY(-2px);
+        }
+        
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        .add-order-form {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr auto;
+            gap: 15px;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+        }
+        
+        .add-order-form input {
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+            transition: border-color 0.3s;
+        }
+        
+        .add-order-form input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            padding: 12px 30px;
+            border: none;
+            border-radius: 8px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-danger {
+            background: #ff4757;
+            color: white;
+            padding: 8px 20px;
+            font-size: 0.9em;
+        }
+        
+        .btn-danger:hover {
+            background: #ff3838;
+            transform: translateY(-2px);
+        }
+        
+        .orders-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+        }
+        
+        .order-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 25px;
+            border-radius: 15px;
+            transition: all 0.3s;
+            border: 2px solid transparent;
+        }
+        
+        .order-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-color: #667eea;
+        }
+        
+        .order-card h3 {
+            color: #2d3436;
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+        
+        .order-card p {
+            color: #636e72;
+            margin: 8px 0;
+            font-size: 0.95em;
+        }
+        
+        .order-card .order-id {
+            font-family: 'Courier New', monospace;
+            background: rgba(255,255,255,0.7);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 0.85em;
+            display: inline-block;
+            margin-bottom: 10px;
+        }
+        
+        .order-status {
+            display: inline-block;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-top: 10px;
+        }
+        
+        .status-pending {
+            background: #ffeaa7;
+            color: #d63031;
+        }
+        
+        .status-completed {
+            background: #55efc4;
+            color: #00b894;
+        }
+        
+        .order-actions {
+            margin-top: 15px;
+            display: flex;
+            gap: 10px;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #636e72;
+        }
+        
+        .empty-state svg {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .empty-state h3 {
+            font-size: 1.5em;
+            margin-bottom: 10px;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            color: white;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-item .number {
+            font-size: 2.5em;
+            font-weight: bold;
+        }
+        
+        .stat-item .label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📦 Order Management</h1>
+            <p>Clean Architecture Demo</p>
+        </div>
+        
+        <div class="nav">
+            <a href="/users">👥 Users</a>
+            <a href="/orders">📦 Orders</a>
+        </div>
+        
+        <div class="card">
+            <div class="stats">
+                <div class="stat-item">
+                    <div class="number">{{ orders|length }}</div>
+                    <div class="label">Total Orders</div>
+                </div>
+            </div>
+            
+            <form class="add-order-form" onsubmit="addOrder(event)">
+                <input type="text" id="orderId" placeholder="Order ID" required>
+                <input type="text" id="userId" placeholder="User ID" required>
+                <input type="text" id="product" placeholder="Product" required>
+                <input type="number" id="quantity" placeholder="Quantity" min="1" required>
+                <button type="submit" class="btn btn-primary">➕ Add Order</button>
+            </form>
+            
+            {% if orders %}
+            <div class="orders-grid">
+                {% for order in orders %}
+                <div class="order-card">
+                    <span class="order-id">🆔 {{ order.id }}</span>
+                    <h3>{{ order.product }}</h3>
+                    <p>👤 User ID: {{ order.user_id }}</p>
+                    <p>📊 Quantity: {{ order.quantity }}</p>
+                    <span class="order-status status-{{ order.status }}">{{ order.status|upper }}</span>
+                    <div class="order-actions">
+                        <button class="btn btn-danger" onclick="deleteOrder('{{ order.id }}')">🗑️ Delete</button>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+                <h3>No orders yet</h3>
+                <p>Add your first order using the form above</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+    
+    <script>
+        async function addOrder(event) {
+            event.preventDefault();
+            
+            const orderId = document.getElementById('orderId').value;
+            const userId = document.getElementById('userId').value;
+            const product = document.getElementById('product').value;
+            const quantity = document.getElementById('quantity').value;
+            
+            try {
+                const response = await fetch('/api/orders', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        id: orderId,
+                        user_id: userId,
+                        product: product,
+                        quantity: parseInt(quantity)
+                    })
+                });
+                
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + error.detail);
+                }
+            } catch (error) {
+                alert('Error adding order: ' + error.message);
+            }
+        }
+        
+        async function deleteOrder(orderId) {
+            if (!confirm('Are you sure you want to delete this order?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`/api/orders/${orderId}`, {
+                    method: 'DELETE'
+                });
+                
+                if (response.ok || response.status === 204) {
+                    window.location.reload();
+                } else {
+                    const error = await response.json();
+                    alert('Error: ' + error.detail);
+                }
+            } catch (error) {
+                alert('Error deleting order: ' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>

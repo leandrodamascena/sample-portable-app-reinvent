@@ -14,10 +14,11 @@ class CreateOrderUseCase:
         """Execute order creation"""
         user_id = input_data.get("user_id")
         product = input_data.get("product")
-        amount = input_data.get("amount")
+        quantity = input_data.get("quantity")
+        status = input_data.get("status", "pending")
 
-        order_id = str(uuid.uuid4())
-        order = Order(order_id, user_id, product, amount)
+        order_id = input_data.get("id") or str(uuid.uuid4())
+        order = Order(order_id, user_id, product, quantity, status)
 
         await self._order_repository.create(order)
         return order
