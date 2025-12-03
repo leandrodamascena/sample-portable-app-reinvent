@@ -2,10 +2,18 @@
 
 # Configuration variables
 AWS_REGION="${AWS_REGION:-us-west-2}"
-# Add random hash to avoid conflicts with existing resources
-RANDOM_HASH=$(date +%s | md5sum | head -c 8)
-CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-eks-${RANDOM_HASH}}"
 KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.34}"
+
+# Check if cluster name is already saved from previous run
+if [ -z "$CLUSTER_NAME" ] && [ -f "../.eks_cluster_name" ]; then
+    echo "🔄 Loading existing cluster name from previous run..."
+    source ../.eks_cluster_name
+    echo "✅ Using cluster: ${CLUSTER_NAME}"
+else
+    # Add random hash to avoid conflicts with existing resources
+    RANDOM_HASH=$(date +%s | md5sum | head -c 8)
+    CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-eks-${RANDOM_HASH}}"
+fi
 
 # Get AWS account number dynamically
 AWS_ACCOUNT_NUMBER=$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null)
@@ -57,6 +65,11 @@ if [ $? -ne 0 ]; then
     echo "❌ Failed to create EKS Auto Mode cluster"
     exit 1
 fi
+
+# Save cluster name for other scripts to use
+echo "export CLUSTER_NAME=${CLUSTER_NAME}" > ../.eks_cluster_name
+echo "export AWS_REGION=${AWS_REGION}" >> ../.eks_cluster_name
+echo "💾 Cluster name saved to ../.eks_cluster_name"
 
 echo ""
 echo "✅ EKS Auto Mode cluster created successfully!"

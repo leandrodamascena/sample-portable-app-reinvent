@@ -1,6 +1,9 @@
 # Automatically generated image URI file
 .image_uri
 
+# Automatically generated EKS cluster name file
+.eks_cluster_name
+
 # Temporary files
 /tmp/
 *.tmp

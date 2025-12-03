@@ -4,11 +4,22 @@
 
 # Configuration variables
 AWS_REGION="${AWS_REGION:-us-west-2}"
-# Add random hash to avoid conflicts with existing resources
-RANDOM_HASH=$(date +%s | md5sum | head -c 8)
-CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-eks-${RANDOM_HASH}}"
 NAMESPACE="${NAMESPACE:-default}"
 APP_NAME="clean-architecture-app"
+
+# Load cluster name from create-cluster.sh if not set
+if [ -z "$CLUSTER_NAME" ]; then
+    if [ -f "../.eks_cluster_name" ]; then
+        echo "🔄 Loading cluster name from create-cluster.sh..."
+        source ../.eks_cluster_name
+        echo "✅ Using cluster: ${CLUSTER_NAME}"
+    else
+        echo "⚠️  Cluster name not found in .eks_cluster_name file."
+        echo "💡 If you know the cluster name, set it with: export CLUSTER_NAME=your-cluster-name"
+        # Use default without hash for cleanup attempts
+        CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-eks}"
+    fi
+fi
 
 # Get AWS account number dynamically
 AWS_ACCOUNT_NUMBER=$(aws sts get-caller-identity --query 'Account' --output text 2>/dev/null)
