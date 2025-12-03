@@ -1,4 +1,4 @@
-# Software Architectural Evolution And Portable Application Deployment on AWS
+# The Shapeshifiting Application: Architecture that transforms across AWS 
 
 This project is your practical guide to mastering modern software architecture patterns. Through a hands-on journey of evolving a simple user management application, you'll learn how to transform a basic monolithic codebase into a sophisticated clean architecture implementation. But that's not all – you'll also discover how to maintain deployment flexibility across various AWS compute services, a critical skill in today's cloud-native world.
 
