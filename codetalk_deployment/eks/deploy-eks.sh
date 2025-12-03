@@ -2,7 +2,9 @@
 
 # Configuration variables
 AWS_REGION="${AWS_REGION:-us-west-2}"
-CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-eks}"
+# Add random hash to avoid conflicts with existing resources
+RANDOM_HASH=$(date +%s | md5sum | head -c 8)
+CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-eks-${RANDOM_HASH}}"
 IMAGE_URI="${IMAGE_URI}"
 NAMESPACE="${NAMESPACE:-default}"
 APP_NAME="clean-architecture-app"

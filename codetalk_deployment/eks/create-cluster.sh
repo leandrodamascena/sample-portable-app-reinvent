@@ -2,7 +2,9 @@
 
 # Configuration variables
 AWS_REGION="${AWS_REGION:-us-west-2}"
-CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-eks}"
+# Add random hash to avoid conflicts with existing resources
+RANDOM_HASH=$(date +%s | md5sum | head -c 8)
+CLUSTER_NAME="${CLUSTER_NAME:-clean-architecture-eks-${RANDOM_HASH}}"
 KUBERNETES_VERSION="${KUBERNETES_VERSION:-1.34}"
 
 # Get AWS account number dynamically
